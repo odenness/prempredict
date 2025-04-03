@@ -18,6 +18,20 @@ FILES = [
     "epl1920matchday-results-pts.csv"
 ]
 
+# Weight by recency of season
+SEASON_WEIGHTS = {
+    "epl1011": 0.1,
+    "epl1112": 0.2,
+    "epl1213": 0.3,
+    "epl1314": 0.4,
+    "epl1415": 0.5,
+    "epl1516": 0.6,
+    "epl1617": 0.7,
+    "epl1718": 0.8,
+    "epl1819": 0.9,
+    "epl1920": 1.0,
+}
+
 @st.cache_data
 def load_and_prepare_data():
     match_data = []
@@ -56,13 +70,18 @@ def load_and_prepare_data():
                             opponent = opp
                             break
 
+                    season_weight = SEASON_WEIGHTS.get(season, 1.0)
+                    matchday_weight = md / 38  # 1 to 38 scaled between ~0.026 and 1
+                    combined_weight = season_weight * matchday_weight
+
                     match_data.append({
                         "Season": season,
                         "Team": team,
                         "Opponent": opponent,
                         "IsHome": is_home,
                         "Win": win,
-                        "Matchday": md
+                        "Matchday": md,
+                        "Weight": combined_weight
                     })
 
         except Exception as e:
@@ -72,23 +91,25 @@ def load_and_prepare_data():
     df_all = pd.get_dummies(df_all, columns=["Team", "Opponent"], drop_first=True)
     return df_all
 
-# Load and prepare data
-st.title("⚽ Premier League Match Win Predictor")
+# Load data
+st.title("⚽ Premier League Match Win Predictor (Weighted by Recency)")
 df = load_and_prepare_data()
 
 # Prepare model
-X = df.drop(columns=["Win", "Season"])
+X = df.drop(columns=["Win", "Season", "Weight"])
 y = df["Win"]
+weights = df["Weight"]
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+sample_weights_train = weights.iloc[X_train.index]
 
-# FIXED: convert set to list before adding another list
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train, sample_weight=sample_weights_train)
+
+# UI elements
 all_teams = sorted(list(set(t.replace("Team_", "") for t in df.columns if t.startswith("Team_"))) + ["Chelsea"])
 all_opponents = sorted(list(set(t.replace("Opponent_", "") for t in df.columns if t.startswith("Opponent_"))) + ["Chelsea"])
 
-# UI
 team = st.selectbox("Select your team", all_teams)
 opponent = st.selectbox("Select opponent", all_opponents)
 is_home = st.radio("Is your team playing at home?", ["Yes", "No"]) == "Yes"
@@ -96,7 +117,7 @@ is_home = st.radio("Is your team playing at home?", ["Yes", "No"]) == "Yes"
 if st.button("Predict Result"):
     input_row = {col: 0 for col in X.columns}
     input_row["IsHome"] = 1 if is_home else 0
-    input_row["Matchday"] = 1  # optional
+    input_row["Matchday"] = 1  # Placeholder
 
     team_col = f"Team_{team}"
     opp_col = f"Opponent_{opponent}"
@@ -104,7 +125,7 @@ if st.button("Predict Result"):
     if team_col in input_row:
         input_row[team_col] = 1
     else:
-        st.warning(f"⚠️ Team '{team}' not in training data.")
+        st.warning(f"⚠️ Team '{team}' not in training data. Prediction might be off.")
 
     if opp_col in input_row:
         input_row[opp_col] = 1
