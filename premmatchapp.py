@@ -47,7 +47,6 @@ def load_and_prepare_data():
                     is_home = 1 if loc == "Home" else 0
                     win = 1 if outcome == "W" else 0
 
-                    # Guess opponent
                     opponent = "Unknown"
                     for opp in teams:
                         if opp == team:
@@ -73,7 +72,7 @@ def load_and_prepare_data():
     df_all = pd.get_dummies(df_all, columns=["Team", "Opponent"], drop_first=True)
     return df_all
 
-# Load data
+# Load and prepare data
 st.title("⚽ Premier League Match Win Predictor")
 df = load_and_prepare_data()
 
@@ -85,19 +84,19 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
 model = RandomForestClassifier(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 
-# UI elements
-all_teams = sorted(set(t.replace("Team_", "") for t in df.columns if t.startswith("Team_")) + ["Chelsea"])
-all_opponents = sorted(set(t.replace("Opponent_", "") for t in df.columns if t.startswith("Opponent_")) + ["Chelsea"])
+# FIXED: convert set to list before adding another list
+all_teams = sorted(list(set(t.replace("Team_", "") for t in df.columns if t.startswith("Team_"))) + ["Chelsea"])
+all_opponents = sorted(list(set(t.replace("Opponent_", "") for t in df.columns if t.startswith("Opponent_"))) + ["Chelsea"])
 
+# UI
 team = st.selectbox("Select your team", all_teams)
 opponent = st.selectbox("Select opponent", all_opponents)
 is_home = st.radio("Is your team playing at home?", ["Yes", "No"]) == "Yes"
 
 if st.button("Predict Result"):
-    # Build input row
     input_row = {col: 0 for col in X.columns}
     input_row["IsHome"] = 1 if is_home else 0
-    input_row["Matchday"] = 1  # Placeholder
+    input_row["Matchday"] = 1  # optional
 
     team_col = f"Team_{team}"
     opp_col = f"Opponent_{opponent}"
@@ -105,7 +104,7 @@ if st.button("Predict Result"):
     if team_col in input_row:
         input_row[team_col] = 1
     else:
-        st.warning(f"⚠️ Team '{team}' not in training data. Prediction might be off.")
+        st.warning(f"⚠️ Team '{team}' not in training data.")
 
     if opp_col in input_row:
         input_row[opp_col] = 1
